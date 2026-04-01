@@ -18,6 +18,40 @@ const { errorHandler, notFound } = require('./middleware/errorMiddleware');
 const app = express();
 
 
+// ================= DATABASE CONNECTION (FIXED) =================
+let isConnected = false;
+
+const connectDB = async () => {
+  if (isConnected) {
+    console.log("⚡ Using existing DB connection");
+    return;
+  }
+
+  try {
+    const conn = await mongoose.connect(process.env.MONGO_URI, {
+      bufferCommands: false,
+    });
+
+    isConnected = conn.connections[0].readyState;
+    console.log("✅ MongoDB Connected");
+  } catch (error) {
+    console.error("❌ MongoDB Error:", error.message);
+    throw error;
+  }
+};
+
+
+// ================= DB MIDDLEWARE (IMPORTANT) =================
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Database connection failed" });
+  }
+});
+
+
 // ================= SECURITY =================
 app.use(helmet());
 
@@ -100,20 +134,5 @@ app.use(notFound);
 app.use(errorHandler);
 
 
-// ================= DATABASE CONNECTION =================
-const connectDB = async () => {
-  try {
-    const conn = await mongoose.connect(process.env.MONGO_URI);
-    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
-  } catch (error) {
-    console.error(`❌ MongoDB Error: ${error.message}`);
-  }
-};
-
-
-// ================= CONNECT DB =================
-connectDB();
-
-
-// ================= EXPORT FOR VERCEL =================
+// ================= EXPORT (NO app.listen) =================
 module.exports = app;
