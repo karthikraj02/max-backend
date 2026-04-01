@@ -22,7 +22,7 @@ const app = express();
 app.use(helmet());
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*', // allow all for now (fix later for prod)
+  origin: process.env.FRONTEND_URL || '*',
   credentials: true,
 }));
 
@@ -69,7 +69,7 @@ app.get('/health', (req, res) => {
 });
 
 
-// ================= ROOT ROUTE (FIXED) =================
+// ================= ROOT ROUTE =================
 app.get('/', (req, res) => {
   res.json({
     success: true,
@@ -103,26 +103,17 @@ app.use(errorHandler);
 // ================= DATABASE CONNECTION =================
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-
+    const conn = await mongoose.connect(process.env.MONGO_URI);
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.error(`❌ MongoDB Error: ${error.message}`);
-    process.exit(1);
   }
 };
 
 
-// ================= START SERVER =================
-const PORT = process.env.PORT || 5000;
+// ================= CONNECT DB =================
+connectDB();
 
-connectDB().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
-  });
-});
 
+// ================= EXPORT FOR VERCEL =================
 module.exports = app;
