@@ -1,0 +1,5 @@
+{
+  "success": false,
+  "message": "Email already registered",
+  "stack": "Error: Email already registered\n    at /var/task/controllers/authController.js:25:13\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)"
+}

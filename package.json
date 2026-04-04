@@ -1,5 +1,5 @@
 {
-  "name": "nexus-store-backend",
+  "name": "protech-backend",
   "version": "1.0.0",
   "description": "NexusStore MERN eCommerce Backend",
   "main": "server.js",

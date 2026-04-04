@@ -11,7 +11,7 @@ cloudinary.config({
 const productStorage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: 'nexusstore/products',
+    folder: 'protech/products',
     allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
     transformation: [{ width: 1200, height: 1200, crop: 'limit', quality: 'auto' }],
   },
@@ -20,7 +20,7 @@ const productStorage = new CloudinaryStorage({
 const avatarStorage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: 'nexusstore/avatars',
+    folder: 'protech/avatars',
     allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
     transformation: [{ width: 400, height: 400, crop: 'fill', gravity: 'face', quality: 'auto' }],
   },
