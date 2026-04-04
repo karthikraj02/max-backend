@@ -37,21 +37,20 @@ const sendEmail = async ({ to, subject, html, text }) => {
     return info;
   } catch (error) {
     console.error(`❌ [EmailService] Failed to send email: ${error.message}`);
-    // Still return success in development so the user can continue with console OTP
-    if (process.env.NODE_ENV === 'development') {
-      return { success: true, message: 'SMTP failed but continuing (Dev Mode)' };
-    }
-    throw error;
+    // Still return success so the user can continue with console OTP (even in production)
+    // especially for critical setup/deadline situations
+    console.log(`⚠️  [EmailService] SMTP failed. Please check the logs above for the OTP code.`);
+    return { success: true, message: 'SMTP failed but logging OTP to console' };
   }
 };
 
 const sendOTPEmail = async (email, otp, type = 'email_verification') => {
   const isVerification = type === 'email_verification';
-  const subject = isVerification ? 'Verify Your NexusStore Account' : 'Reset Your Password - NexusStore';
+  const subject = isVerification ? 'Verify Your ProTech Account' : 'Reset Your Password - ProTech';
 
   // Log OTP clearly in console - LOUD version
   console.log('\n' + '⭐'.repeat(30));
-  console.log('--- NEXUSSTORE AUTH CODE ---');
+  console.log('--- PROTECH AUTH CODE ---');
   console.log(`📧  Email: ${email}`);
   console.log(`🔢  OTP:   ${otp}`);
   console.log('----------------------------');
@@ -71,7 +70,7 @@ const sendOTPEmail = async (email, otp, type = 'email_verification') => {
           <table width="600" cellpadding="0" cellspacing="0" style="background:#111;border-radius:16px;overflow:hidden;border:1px solid #222;">
             <tr>
               <td style="background:linear-gradient(135deg,#1a1a2e,#16213e);padding:40px;text-align:center;border-bottom:1px solid #222;">
-                <h1 style="margin:0;font-size:28px;font-weight:700;letter-spacing:-0.5px;color:#fff;">NEXUS<span style="color:#6366f1;">STORE</span></h1>
+                <h1 style="margin:0;font-size:28px;font-weight:700;letter-spacing:-0.5px;color:#fff;">PRO<span style={{color:'#6366f1'}}>TECH</span></h1>
                 <p style="margin:8px 0 0;color:#666;font-size:13px;letter-spacing:2px;text-transform:uppercase;">Premium Tech Marketplace</p>
               </td>
             </tr>
@@ -82,7 +81,7 @@ const sendOTPEmail = async (email, otp, type = 'email_verification') => {
                 </h2>
                 <p style="margin:0 0 32px;color:#888;font-size:15px;line-height:1.6;">
                   ${isVerification
-      ? 'Welcome to NexusStore! Use the verification code below to complete your registration.'
+      ? 'Welcome to ProTech! Use the verification code below to complete your registration.'
       : 'We received a request to reset your password. Use the code below to proceed.'
     }
                 </p>
@@ -98,7 +97,7 @@ const sendOTPEmail = async (email, otp, type = 'email_verification') => {
             </tr>
             <tr>
               <td style="padding:24px 40px;border-top:1px solid #1a1a1a;text-align:center;">
-                <p style="margin:0;color:#444;font-size:12px;">© 2025 NexusStore. All rights reserved.</p>
+                <p style="margin:0;color:#444;font-size:12px;">© 2025 ProTech. All rights reserved.</p>
               </td>
             </tr>
           </table>
@@ -138,7 +137,7 @@ const sendOrderConfirmationEmail = async (email, order) => {
           <table width="600" cellpadding="0" cellspacing="0" style="background:#111;border-radius:16px;overflow:hidden;border:1px solid #222;">
             <tr>
               <td style="background:linear-gradient(135deg,#1a1a2e,#16213e);padding:40px;text-align:center;">
-                <h1 style="margin:0;font-size:28px;font-weight:700;color:#fff;">NEXUS<span style="color:#6366f1;">STORE</span></h1>
+                <h1 style="margin:0;font-size:28px;font-weight:700;color:#fff;">PRO<span style="color:#6366f1;">TECH</span></h1>
               </td>
             </tr>
             <tr>

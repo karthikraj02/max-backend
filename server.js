@@ -107,7 +107,7 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: '🚀 NexusStore API is running!',
+    message: '🚀 ProTech API is running!',
     endpoints: {
       auth: '/api/auth',
       products: '/api/products',
