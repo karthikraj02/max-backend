@@ -2,21 +2,15 @@ const asyncHandler = require('express-async-handler');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
-let razorpay;
-try {
-  razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID || 'dummy_key_id',
-    key_secret: process.env.RAZORPAY_KEY_SECRET || 'dummy_key_secret',
-  });
-} catch (error) {
-  console.error("Razorpay initialization failed:", error.message);
-}
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
 
 // @desc    Create Razorpay order
 // @route   POST /api/payment/create-order
 // @access  Private
 const createRazorpayOrder = asyncHandler(async (req, res) => {
-  if (!razorpay) throw new Error('Razorpay is not configured');
   const { amount, currency = 'INR', orderId } = req.body;
 
   if (!amount || amount <= 0) {
@@ -57,7 +51,7 @@ const verifyPayment = asyncHandler(async (req, res) => {
   }
 
   const expectedSignature = crypto
-    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'dummy_key_secret')
+    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
     .update(`${razorpayOrderId}|${razorpayPaymentId}`)
     .digest('hex');
 
