@@ -18,6 +18,27 @@ const { errorHandler, notFound } = require('./middleware/errorMiddleware');
 const app = express();
 
 
+// ================= SECURITY =================
+app.use(helmet());
+
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://max-frontend-nine.vercel.app',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+}));
+
+
 // ================= DATABASE CONNECTION (FIXED) =================
 let isConnected = false;
 
@@ -50,15 +71,6 @@ app.use(async (req, res, next) => {
     res.status(500).json({ success: false, message: "Database connection failed" });
   }
 });
-
-
-// ================= SECURITY =================
-app.use(helmet());
-
-app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
-  credentials: true,
-}));
 
 
 // ================= RATE LIMIT =================
