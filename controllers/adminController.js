@@ -243,6 +243,200 @@ const deleteProduct = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Product deleted successfully' });
 });
 
+// @desc    Toggle product in-stock / out-of-stock
+// @route   PUT /api/admin/products/:id/toggle-stock
+// @access  Admin
+const toggleProductStock = asyncHandler(async (req, res) => {
+  const product = await Product.findById(req.params.id);
+
+  if (!product) {
+    res.status(404);
+    throw new Error('Product not found');
+  }
+
+  if (product.stock > 0) {
+    // Going out of stock
+    product.stock = 0;
+  } else {
+    // Restore with provided quantity or default to 1
+    const restoreQty = parseInt(req.body.restoreQty) || 1;
+    product.stock = restoreQty;
+  }
+
+  await product.save();
+  res.json({ success: true, product });
+});
+
+// @desc    Get detailed analytics
+// @route   GET /api/admin/analytics
+// @access  Admin
+const getAnalytics = asyncHandler(async (req, res) => {
+  const now = new Date();
+  const twelveMonthsAgo = new Date(now);
+  twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
+  twelveMonthsAgo.setDate(1);
+  twelveMonthsAgo.setHours(0, 0, 0, 0);
+
+  const [
+    revenueByMonth,
+    topProducts,
+    categoryRevenue,
+    orderStatusCounts,
+    userGrowth,
+    totalRevenue,
+    totalTax,
+    totalOrders,
+    paidOrders,
+    stockSummary,
+  ] = await Promise.all([
+    // Revenue & orders per month (last 12 months)
+    Order.aggregate([
+      { $match: { isPaid: true, createdAt: { $gte: twelveMonthsAgo } } },
+      {
+        $group: {
+          _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+          revenue: { $sum: '$totalAmount' },
+          tax: { $sum: '$taxPrice' },
+          orders: { $sum: 1 },
+        },
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1 } },
+    ]),
+
+    // Top 10 products by quantity sold
+    Order.aggregate([
+      { $match: { isPaid: true } },
+      { $unwind: '$orderItems' },
+      {
+        $group: {
+          _id: '$orderItems.product',
+          name: { $first: '$orderItems.name' },
+          totalQty: { $sum: '$orderItems.quantity' },
+          totalRevenue: { $sum: { $multiply: ['$orderItems.price', '$orderItems.quantity'] } },
+        },
+      },
+      { $sort: { totalQty: -1 } },
+      { $limit: 10 },
+    ]),
+
+    // Revenue by category
+    Order.aggregate([
+      { $match: { isPaid: true } },
+      { $unwind: '$orderItems' },
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'orderItems.product',
+          foreignField: '_id',
+          as: 'productInfo',
+        },
+      },
+      { $unwind: { path: '$productInfo', preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: { $ifNull: ['$productInfo.category', 'Unknown'] },
+          revenue: { $sum: { $multiply: ['$orderItems.price', '$orderItems.quantity'] } },
+          orders: { $sum: 1 },
+        },
+      },
+      { $sort: { revenue: -1 } },
+    ]),
+
+    // Order status breakdown
+    Order.aggregate([
+      { $group: { _id: '$orderStatus', count: { $sum: 1 } } },
+    ]),
+
+    // User registrations per month (last 12 months)
+    require('../models/User').aggregate([
+      { $match: { createdAt: { $gte: twelveMonthsAgo } } },
+      {
+        $group: {
+          _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+          users: { $sum: 1 },
+        },
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1 } },
+    ]),
+
+    // Total revenue from paid orders
+    Order.aggregate([
+      { $match: { isPaid: true } },
+      { $group: { _id: null, total: { $sum: '$totalAmount' }, tax: { $sum: '$taxPrice' } } },
+    ]),
+
+    // Total tax collected
+    Order.aggregate([
+      { $match: { isPaid: true } },
+      { $group: { _id: null, tax: { $sum: '$taxPrice' } } },
+    ]),
+
+    // Total orders
+    Order.countDocuments(),
+
+    // Paid orders
+    Order.countDocuments({ isPaid: true }),
+
+    // Stock summary
+    Product.aggregate([
+      { $match: { isActive: true } },
+      {
+        $group: {
+          _id: null,
+          inStock: { $sum: { $cond: [{ $gt: ['$stock', 0] }, 1, 0] } },
+          outOfStock: { $sum: { $cond: [{ $eq: ['$stock', 0] }, 1, 0] } },
+          totalStock: { $sum: '$stock' },
+        },
+      },
+    ]),
+  ]);
+
+  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  // Build full 12-month timeline (fill gaps with 0)
+  const monthlyData = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now);
+    d.setMonth(d.getMonth() - i);
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    const found = revenueByMonth.find(r => r._id.year === year && r._id.month === month);
+    const userFound = userGrowth.find(u => u._id.year === year && u._id.month === month);
+    monthlyData.push({
+      label: `${MONTH_NAMES[month - 1]} ${year}`,
+      month: MONTH_NAMES[month - 1],
+      revenue: found?.revenue || 0,
+      tax: found?.tax || 0,
+      netRevenue: (found?.revenue || 0) - (found?.tax || 0),
+      orders: found?.orders || 0,
+      users: userFound?.users || 0,
+    });
+  }
+
+  const grossRevenue = totalRevenue[0]?.total || 0;
+  const taxCollected = totalRevenue[0]?.tax || 0;
+  const netRevenue = grossRevenue - taxCollected;
+
+  res.json({
+    success: true,
+    analytics: {
+      summary: {
+        grossRevenue,
+        taxCollected,
+        netRevenue,
+        totalOrders,
+        paidOrders,
+        conversionRate: totalOrders > 0 ? ((paidOrders / totalOrders) * 100).toFixed(1) : 0,
+        stockSummary: stockSummary[0] || { inStock: 0, outOfStock: 0, totalStock: 0 },
+      },
+      monthlyData,
+      topProducts,
+      categoryRevenue,
+      orderStatusCounts,
+    },
+  });
+});
+
 module.exports = {
   getDashboardStats,
   getAllUsers,
@@ -252,4 +446,6 @@ module.exports = {
   createProduct,
   updateProduct,
   deleteProduct,
+  toggleProductStock,
+  getAnalytics,
 };
