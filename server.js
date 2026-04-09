@@ -17,13 +17,12 @@ const { errorHandler, notFound } = require('./middleware/errorMiddleware');
 
 const app = express();
 
-
 // ================= SECURITY =================
 app.use(helmet());
 
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://max-frontend-nine.vercel.app',
+  'https://protechco.in',
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
@@ -37,7 +36,6 @@ app.use(cors({
   },
   credentials: true,
 }));
-
 
 // ================= DATABASE CONNECTION (FIXED) =================
 let isConnected = false;
@@ -61,7 +59,6 @@ const connectDB = async () => {
   }
 };
 
-
 // ================= DB MIDDLEWARE (IMPORTANT) =================
 app.use(async (req, res, next) => {
   try {
@@ -71,7 +68,6 @@ app.use(async (req, res, next) => {
     res.status(500).json({ success: false, message: "Database connection failed" });
   }
 });
-
 
 // ================= RATE LIMIT =================
 const limiter = rateLimit({
@@ -89,21 +85,17 @@ const authLimiter = rateLimit({
 app.use('/api/', limiter);
 app.use('/api/auth/', authLimiter);
 
-
 // ================= BODY PARSER =================
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
-
 
 // ================= LOGGING =================
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-
 // ================= STATIC FILES =================
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
 
 // ================= HEALTH ROUTE =================
 app.get('/health', (req, res) => {
@@ -113,7 +105,6 @@ app.get('/health', (req, res) => {
     env: process.env.NODE_ENV
   });
 });
-
 
 // ================= ROOT ROUTE =================
 app.get('/', (req, res) => {
@@ -131,7 +122,6 @@ app.get('/', (req, res) => {
   });
 });
 
-
 // ================= API ROUTES =================
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
@@ -140,11 +130,9 @@ app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payment', paymentRoutes);
 
-
 // ================= ERROR HANDLING =================
 app.use(notFound);
 app.use(errorHandler);
-
 
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   const PORT = process.env.PORT || 5000;
