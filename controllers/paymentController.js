@@ -34,8 +34,14 @@ const isRazorpaySignatureValid = ({ razorpayOrderId, razorpayPaymentId, razorpay
     .createHmac('sha256', keySecret)
     .update(`${razorpayOrderId}|${razorpayPaymentId}`)
     .digest('hex');
+  const expectedSignatureBuffer = Buffer.from(expectedSignature, 'utf8');
+  const receivedSignatureBuffer = Buffer.from(String(razorpaySignature), 'utf8');
 
-  return expectedSignature === razorpaySignature;
+  if (expectedSignatureBuffer.length !== receivedSignatureBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(expectedSignatureBuffer, receivedSignatureBuffer);
 };
 
 // @desc    Create Razorpay order
@@ -54,11 +60,12 @@ const createRazorpayOrder = asyncHandler(async (req, res) => {
   const normalizedCurrency = trimmedCurrency
     ? trimmedCurrency.toUpperCase()
     : 'INR';
+  const receiptSuffix = crypto.randomBytes(6).toString('hex');
 
   const options = {
     amount: Math.round(parsedAmount * 100), // Convert to paise
     currency: normalizedCurrency,
-    receipt: `order_${orderId ? String(orderId) : 'direct'}_${Date.now()}`,
+    receipt: `order_${orderId ? String(orderId) : 'direct'}_${Date.now()}_${receiptSuffix}`,
     notes: {
       orderId: orderId?.toString() || '',
       userId: req.user?._id?.toString() || '',
