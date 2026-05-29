@@ -3,7 +3,6 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
 let razorpayClient;
-let razorpayClientConfig;
 
 const getRazorpayConfig = () => {
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -17,16 +16,17 @@ const getRazorpayConfig = () => {
 };
 
 const getRazorpayClient = () => {
-  const { keyId, keySecret } = getRazorpayConfig();
-  const nextConfig = `${keyId}:${keySecret}`;
-
-  if (!razorpayClient || razorpayClientConfig !== nextConfig) {
+  if (!razorpayClient) {
+    const { keyId, keySecret } = getRazorpayConfig();
     razorpayClient = new Razorpay({ key_id: keyId, key_secret: keySecret });
-    razorpayClientConfig = nextConfig;
   }
 
   return razorpayClient;
 };
+
+const hasCompleteVerificationPayload = ({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) => (
+  Boolean(razorpayOrderId) && Boolean(razorpayPaymentId) && Boolean(razorpaySignature)
+);
 
 const isRazorpaySignatureValid = ({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) => {
   const { keySecret } = getRazorpayConfig();
@@ -56,10 +56,7 @@ const createRazorpayOrder = asyncHandler(async (req, res) => {
     throw new Error('Valid amount is required');
   }
 
-  const trimmedCurrency = typeof currency === 'string' ? currency.trim() : '';
-  const normalizedCurrency = trimmedCurrency
-    ? trimmedCurrency.toUpperCase()
-    : 'INR';
+  const normalizedCurrency = String(currency || 'INR').trim().toUpperCase();
   const receiptSuffix = crypto.randomBytes(6).toString('hex');
 
   const options = {
@@ -91,7 +88,7 @@ const createRazorpayOrder = asyncHandler(async (req, res) => {
 const verifyPayment = asyncHandler(async (req, res) => {
   const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
 
-  if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+  if (!hasCompleteVerificationPayload({ razorpayOrderId, razorpayPaymentId, razorpaySignature })) {
     res.status(400);
     throw new Error('Payment verification data is incomplete');
   }
@@ -114,4 +111,10 @@ const getRazorpayKey = asyncHandler(async (req, res) => {
   res.json({ success: true, keyId });
 });
 
-module.exports = { createRazorpayOrder, verifyPayment, getRazorpayKey, isRazorpaySignatureValid };
+module.exports = {
+  createRazorpayOrder,
+  verifyPayment,
+  getRazorpayKey,
+  isRazorpaySignatureValid,
+  hasCompleteVerificationPayload,
+};

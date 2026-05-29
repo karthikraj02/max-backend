@@ -2,7 +2,10 @@ const asyncHandler = require('express-async-handler');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const { sendOrderConfirmationEmail } = require('../services/emailService');
-const { isRazorpaySignatureValid } = require('./paymentController');
+const {
+  isRazorpaySignatureValid,
+  hasCompleteVerificationPayload,
+} = require('./paymentController');
 
 // @desc    Create new order
 // @route   POST /api/orders
@@ -112,7 +115,7 @@ const getMyOrders = asyncHandler(async (req, res) => {
 const updateOrderToPaid = asyncHandler(async (req, res) => {
   const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
 
-  if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+  if (!hasCompleteVerificationPayload({ razorpayOrderId, razorpayPaymentId, razorpaySignature })) {
     res.status(400);
     throw new Error('Payment verification data is incomplete');
   }
