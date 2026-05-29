@@ -3,6 +3,12 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
 let razorpayClient;
+let receiptCounter = 0;
+
+const getReceiptSuffix = () => {
+  receiptCounter = (receiptCounter + 1) % 1000000;
+  return `${process.hrtime.bigint().toString(36)}_${receiptCounter}`;
+};
 
 const getRazorpayConfig = () => {
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -57,7 +63,7 @@ const createRazorpayOrder = asyncHandler(async (req, res) => {
   }
 
   const normalizedCurrency = String(currency || 'INR').trim().toUpperCase();
-  const receiptSuffix = crypto.randomBytes(6).toString('hex');
+  const receiptSuffix = getReceiptSuffix();
 
   const options = {
     amount: Math.round(parsedAmount * 100), // Convert to paise
@@ -65,7 +71,7 @@ const createRazorpayOrder = asyncHandler(async (req, res) => {
     receipt: `order_${orderId ? String(orderId) : 'direct'}_${Date.now()}_${receiptSuffix}`,
     notes: {
       orderId: orderId?.toString() || '',
-      userId: req.user?._id?.toString() || '',
+      userId: req.user?._id?.toString() || 'unauthenticated',
     },
   };
 
