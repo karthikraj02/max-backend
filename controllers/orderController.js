@@ -2,6 +2,7 @@ const asyncHandler = require('express-async-handler');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const { sendOrderConfirmationEmail } = require('../services/emailService');
+const { isRazorpaySignatureValid } = require('./paymentController');
 
 // @desc    Create new order
 // @route   POST /api/orders
@@ -111,6 +112,11 @@ const getMyOrders = asyncHandler(async (req, res) => {
 const updateOrderToPaid = asyncHandler(async (req, res) => {
   const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
 
+  if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+    res.status(400);
+    throw new Error('Payment verification data is incomplete');
+  }
+
   const order = await Order.findById(req.params.id);
 
   if (!order) {
@@ -123,14 +129,7 @@ const updateOrderToPaid = asyncHandler(async (req, res) => {
     throw new Error('Order is already paid');
   }
 
-  // Verify payment signature
-  const crypto = require('crypto');
-  const expectedSignature = crypto
-    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-    .digest('hex');
-
-  if (expectedSignature !== razorpaySignature) {
+  if (!isRazorpaySignatureValid({ razorpayOrderId, razorpayPaymentId, razorpaySignature })) {
     res.status(400);
     throw new Error('Payment verification failed: Invalid signature');
   }

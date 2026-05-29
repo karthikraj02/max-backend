@@ -2,10 +2,47 @@ const asyncHandler = require('express-async-handler');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+let razorpayClient;
+let razorpayClientConfig;
+
+const getRazorpayConfig = () => {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+
+  if (!keyId || !keySecret) {
+    throw new Error('Razorpay is not configured');
+  }
+
+  return { keyId, keySecret };
+};
+
+const getRazorpayClient = () => {
+  const { keyId, keySecret } = getRazorpayConfig();
+  const nextConfig = `${keyId}:${keySecret}`;
+
+  if (!razorpayClient || razorpayClientConfig !== nextConfig) {
+    razorpayClient = new Razorpay({ key_id: keyId, key_secret: keySecret });
+    razorpayClientConfig = nextConfig;
+  }
+
+  return razorpayClient;
+};
+
+const isRazorpaySignatureValid = ({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) => {
+  const { keySecret } = getRazorpayConfig();
+  const expectedSignature = crypto
+    .createHmac('sha256', keySecret)
+    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+    .digest('hex');
+  const expectedSignatureBuffer = Buffer.from(expectedSignature, 'utf8');
+  const receivedSignatureBuffer = Buffer.from(String(razorpaySignature), 'utf8');
+
+  if (expectedSignatureBuffer.length !== receivedSignatureBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(expectedSignatureBuffer, receivedSignatureBuffer);
+};
 
 // @desc    Create Razorpay order
 // @route   POST /api/payment/create-order
@@ -13,29 +50,38 @@ const razorpay = new Razorpay({
 const createRazorpayOrder = asyncHandler(async (req, res) => {
   const { amount, currency = 'INR', orderId } = req.body;
 
-  if (!amount || amount <= 0) {
+  const parsedAmount = Number(amount);
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
     res.status(400);
     throw new Error('Valid amount is required');
   }
 
+  const trimmedCurrency = typeof currency === 'string' ? currency.trim() : '';
+  const normalizedCurrency = trimmedCurrency
+    ? trimmedCurrency.toUpperCase()
+    : 'INR';
+  const receiptSuffix = crypto.randomBytes(6).toString('hex');
+
   const options = {
-    amount: Math.round(amount * 100), // Convert to paise
-    currency,
-    receipt: `order_${orderId}_${Date.now()}`,
+    amount: Math.round(parsedAmount * 100), // Convert to paise
+    currency: normalizedCurrency,
+    receipt: `order_${orderId ? String(orderId) : 'direct'}_${Date.now()}_${receiptSuffix}`,
     notes: {
       orderId: orderId?.toString() || '',
-      userId: req.user._id.toString(),
+      userId: req.user?._id?.toString() || '',
     },
   };
 
+  const razorpay = getRazorpayClient();
   const razorpayOrder = await razorpay.orders.create(options);
+  const { keyId } = getRazorpayConfig();
 
   res.json({
     success: true,
     orderId: razorpayOrder.id,
     amount: razorpayOrder.amount,
     currency: razorpayOrder.currency,
-    keyId: process.env.RAZORPAY_KEY_ID,
+    keyId,
   });
 });
 
@@ -50,12 +96,7 @@ const verifyPayment = asyncHandler(async (req, res) => {
     throw new Error('Payment verification data is incomplete');
   }
 
-  const expectedSignature = crypto
-    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-    .digest('hex');
-
-  const isValid = expectedSignature === razorpaySignature;
+  const isValid = isRazorpaySignatureValid({ razorpayOrderId, razorpayPaymentId, razorpaySignature });
 
   if (!isValid) {
     res.status(400);
@@ -69,7 +110,8 @@ const verifyPayment = asyncHandler(async (req, res) => {
 // @route   GET /api/payment/key
 // @access  Private
 const getRazorpayKey = asyncHandler(async (req, res) => {
-  res.json({ success: true, keyId: process.env.RAZORPAY_KEY_ID });
+  const { keyId } = getRazorpayConfig();
+  res.json({ success: true, keyId });
 });
 
-module.exports = { createRazorpayOrder, verifyPayment, getRazorpayKey };
+module.exports = { createRazorpayOrder, verifyPayment, getRazorpayKey, isRazorpaySignatureValid };
