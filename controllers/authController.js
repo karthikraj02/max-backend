@@ -6,46 +6,48 @@ const { generateToken } = require('../middleware/authMiddleware');
 const { sendOTPEmail } = require('../services/emailService');
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+const normalizeEmail = (email) => (email || '').toString().trim().toLowerCase();
 
 // @desc    Register user & send OTP
 // @route   POST /api/auth/register
 // @access  Public
 const register = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
+  const normalizedEmail = normalizeEmail(email);
 
-  if (!name || !email || !password) {
+  if (!name || !normalizedEmail || !password) {
     res.status(400);
     throw new Error('Please provide name, email, and password');
   }
 
-  const userExists = await User.findOne({ email });
+  const userExists = await User.findOne({ email: normalizedEmail });
   if (userExists) {
     if (userExists.isVerified) {
       res.status(400);
       throw new Error('Email already registered');
     }
     // Re-send OTP for unverified users
-    await OTP.deleteMany({ email, type: 'email_verification' });
+    await OTP.deleteMany({ email: normalizedEmail, type: 'email_verification' });
   } else {
-    await User.create({ name, email, password });
+    await User.create({ name, email: normalizedEmail, password });
   }
 
   const otp = generateOTP();
   const hashedOTP = crypto.createHash('sha256').update(otp).digest('hex');
 
   await OTP.create({
-    email,
+    email: normalizedEmail,
     otp: hashedOTP,
     type: 'email_verification',
     expiresAt: new Date(Date.now() + 10 * 60 * 1000),
   });
 
-  await sendOTPEmail(email, otp, 'email_verification');
+  await sendOTPEmail(normalizedEmail, otp, 'email_verification');
 
   res.status(201).json({
     success: true,
     message: 'Registration initiated. Please verify your email with the OTP sent.',
-    email,
+    email: normalizedEmail,
   });
 });
 
@@ -54,13 +56,14 @@ const register = asyncHandler(async (req, res) => {
 // @access  Public
 const verifyOTP = asyncHandler(async (req, res) => {
   const { email, otp, type = 'email_verification' } = req.body;
+  const normalizedEmail = normalizeEmail(email);
 
-  if (!email || !otp) {
+  if (!normalizedEmail || !otp) {
     res.status(400);
     throw new Error('Email and OTP are required');
   }
 
-  const otpRecord = await OTP.findOne({ email, type });
+  const otpRecord = await OTP.findOne({ email: normalizedEmail, type });
 
   if (!otpRecord) {
     res.status(400);
@@ -92,7 +95,7 @@ const verifyOTP = asyncHandler(async (req, res) => {
 
   if (type === 'email_verification') {
     const user = await User.findOneAndUpdate(
-      { email },
+      { email: normalizedEmail },
       { isVerified: true },
       { new: true }
     );
@@ -123,7 +126,7 @@ const verifyOTP = asyncHandler(async (req, res) => {
       success: true,
       message: 'OTP verified. You can now reset your password.',
       resetToken: crypto.randomBytes(20).toString('hex'),
-      email,
+      email: normalizedEmail,
     });
   }
 });
@@ -133,13 +136,14 @@ const verifyOTP = asyncHandler(async (req, res) => {
 // @access  Public
 const resendOTP = asyncHandler(async (req, res) => {
   const { email, type = 'email_verification' } = req.body;
+  const normalizedEmail = normalizeEmail(email);
 
-  if (!email) {
+  if (!normalizedEmail) {
     res.status(400);
     throw new Error('Email is required');
   }
 
-  const user = await User.findOne({ email });
+  const user = await User.findOne({ email: normalizedEmail });
   if (!user) {
     res.status(404);
     throw new Error('User not found');
@@ -152,7 +156,7 @@ const resendOTP = asyncHandler(async (req, res) => {
 
   // Check rate limiting - 1 OTP per 2 minutes
   const recentOTP = await OTP.findOne({
-    email,
+    email: normalizedEmail,
     type,
     createdAt: { $gt: new Date(Date.now() - 2 * 60 * 1000) },
   });
@@ -162,19 +166,19 @@ const resendOTP = asyncHandler(async (req, res) => {
     throw new Error('Please wait 2 minutes before requesting another OTP');
   }
 
-  await OTP.deleteMany({ email, type });
+  await OTP.deleteMany({ email: normalizedEmail, type });
 
   const otp = generateOTP();
   const hashedOTP = crypto.createHash('sha256').update(otp).digest('hex');
 
   await OTP.create({
-    email,
+    email: normalizedEmail,
     otp: hashedOTP,
     type,
     expiresAt: new Date(Date.now() + 10 * 60 * 1000),
   });
 
-  await sendOTPEmail(email, otp, type);
+  await sendOTPEmail(normalizedEmail, otp, type);
 
   res.json({ success: true, message: 'OTP sent successfully.' });
 });
@@ -184,13 +188,14 @@ const resendOTP = asyncHandler(async (req, res) => {
 // @access  Public
 const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
+  const normalizedEmail = normalizeEmail(email);
 
-  if (!email || !password) {
+  if (!normalizedEmail || !password) {
     res.status(400);
     throw new Error('Email and password are required');
   }
 
-  const user = await User.findOne({ email }).select('+password');
+  const user = await User.findOne({ email: normalizedEmail }).select('+password');
 
   if (!user) {
     res.status(401);
@@ -235,13 +240,14 @@ const login = asyncHandler(async (req, res) => {
 // @access  Public
 const forgotPassword = asyncHandler(async (req, res) => {
   const { email } = req.body;
+  const normalizedEmail = normalizeEmail(email);
 
-  if (!email) {
+  if (!normalizedEmail) {
     res.status(400);
     throw new Error('Email is required');
   }
 
-  const user = await User.findOne({ email });
+  const user = await User.findOne({ email: normalizedEmail });
 
   // Always return success to prevent email enumeration
   if (!user) {
@@ -251,19 +257,19 @@ const forgotPassword = asyncHandler(async (req, res) => {
     });
   }
 
-  await OTP.deleteMany({ email, type: 'password_reset' });
+  await OTP.deleteMany({ email: normalizedEmail, type: 'password_reset' });
 
   const otp = generateOTP();
   const hashedOTP = crypto.createHash('sha256').update(otp).digest('hex');
 
   await OTP.create({
-    email,
+    email: normalizedEmail,
     otp: hashedOTP,
     type: 'password_reset',
     expiresAt: new Date(Date.now() + 10 * 60 * 1000),
   });
 
-  await sendOTPEmail(email, otp, 'password_reset');
+  await sendOTPEmail(normalizedEmail, otp, 'password_reset');
 
   res.json({
     success: true,
@@ -276,8 +282,9 @@ const forgotPassword = asyncHandler(async (req, res) => {
 // @access  Public
 const resetPassword = asyncHandler(async (req, res) => {
   const { email, otp, newPassword } = req.body;
+  const normalizedEmail = normalizeEmail(email);
 
-  if (!email || !otp || !newPassword) {
+  if (!normalizedEmail || !otp || !newPassword) {
     res.status(400);
     throw new Error('Email, OTP, and new password are required');
   }
@@ -287,7 +294,7 @@ const resetPassword = asyncHandler(async (req, res) => {
     throw new Error('Password must be at least 8 characters');
   }
 
-  const otpRecord = await OTP.findOne({ email, type: 'password_reset' });
+  const otpRecord = await OTP.findOne({ email: normalizedEmail, type: 'password_reset' });
 
   if (!otpRecord || new Date() > otpRecord.expiresAt) {
     res.status(400);
@@ -302,7 +309,7 @@ const resetPassword = asyncHandler(async (req, res) => {
 
   await OTP.deleteOne({ _id: otpRecord._id });
 
-  const user = await User.findOne({ email });
+  const user = await User.findOne({ email: normalizedEmail });
   if (!user) {
     res.status(404);
     throw new Error('User not found');
