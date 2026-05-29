@@ -2,6 +2,9 @@ const asyncHandler = require('express-async-handler');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
+let razorpayClient;
+let razorpayClientConfig;
+
 const getRazorpayConfig = () => {
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -15,7 +18,14 @@ const getRazorpayConfig = () => {
 
 const getRazorpayClient = () => {
   const { keyId, keySecret } = getRazorpayConfig();
-  return new Razorpay({ key_id: keyId, key_secret: keySecret });
+  const nextConfig = `${keyId}:${keySecret}`;
+
+  if (!razorpayClient || razorpayClientConfig !== nextConfig) {
+    razorpayClient = new Razorpay({ key_id: keyId, key_secret: keySecret });
+    razorpayClientConfig = nextConfig;
+  }
+
+  return razorpayClient;
 };
 
 const isRazorpaySignatureValid = ({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) => {
@@ -40,8 +50,9 @@ const createRazorpayOrder = asyncHandler(async (req, res) => {
     throw new Error('Valid amount is required');
   }
 
-  const normalizedCurrency = typeof currency === 'string' && currency.trim()
-    ? currency.trim().toUpperCase()
+  const trimmedCurrency = typeof currency === 'string' ? currency.trim() : '';
+  const normalizedCurrency = trimmedCurrency
+    ? trimmedCurrency.toUpperCase()
     : 'INR';
 
   const options = {
